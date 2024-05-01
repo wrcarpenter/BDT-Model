@@ -19,7 +19,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import newton
 
-
 def payoff(x, typ):
     if typ == "bond":
         return x
@@ -157,15 +156,39 @@ def rateTree(r0, theta, sigma, delta):
         
         tree[0, col] = tree[0, col-1] + theta[col]*delta+sigma*math.sqrt(delta)
    
-    
     for col in range(1, len(tree)):
         for row in range(1, col+1):
             tree[row, col] = tree[row-1, col] - 2*sigma*math.sqrt(delta)
     
     # return exponentiated tree
     return np.exp(tree)
-         
-                                   
+
+# Added function for handling bond options
+def priceOption(rates, prob, cf, delta, typ, notion, ptree, bond_px):
+    
+    # px is non-callable bond price
+    # last part of tree is 0 because option expires worthless at maturity
+    tree = np.zeros([len(rates)+1, len(rates)+1])
+    
+    for col in reversed(range(0, len(tree)-1)):
+        for row in range(0, col+1):
+            
+            # get rate
+            rate = rates[row, col]
+            # value of option if call
+            call_ex   =  ptree[row, col]  - notion
+            # value of option if wait
+            call_wait =  np.exp(-1*rate*delta)*\
+                         (prob*(tree[row, col+1]) + prob*(tree[row+1, col+1]))
+            
+            tree[row, col] = max(call_ex, call_wait)             
+            
+    option_px   = tree[0,0]
+    callable_px = bond_px - option_px        
+    
+    return [callable_px, option_px, bond_px, tree]
+    
+# Price bonds, swaps, caps
 def priceTree(rates, prob, cf, delta, typ, notion):
         
     # include extra column for payoff         
@@ -195,11 +218,14 @@ if __name__ == "__main__":
     
     # small example for calibration
     zeros    = np.array(zcbs.iloc[:,0:60])
-    x        = build(zeros, 0.08, 1/12) 
-    tree_bdt = rateTree(x[0], x[2], 0.088, 1/12)
+    x        = build(zeros, 0.21, 1/12) 
+    tree_bdt = rateTree(x[0], x[2], 0.21, 1/12)
      
     cashfl  = cf_bond(tree_bdt, 5.00, 1/12, 1, 0.00)
     pricing = priceTree(tree_bdt, 1/2, cashfl, 1/12, "bond", 1)
+    
+    
+    ptree = pricing[1]
     
     print(zeros[0,zeros.shape[1]-1])
     print(pricing[0])
